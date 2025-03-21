@@ -1,0 +1,39 @@
+[project]
+name = "fastapi-service"
+version = "0.0.1"
+description = "使用 FastAPI 从 0 到 1 完成搭建服务"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "asgi-correlation-id>=4.3.4",
+    "asyncmy>=0.2.10",
+    "asyncpg>=0.30.0",
+    "bcrypt>=4.3.0",
+    "fastapi-limiter>=0.1.6",
+    "fastapi-pagination>=0.12.34",
+    "fastapi[standard]>=0.115.11",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "msgspec>=0.19.0",
+    "path>=17.1.0",
+    "pydantic>=2.10.6",
+    "pydantic-extra-types>=2.10.3",
+    "pydantic-settings>=2.8.1",
+    "python-jose>=3.4.0",
+    "requests>=2.32.3",
+    "user-agents>=2.2.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3.5"]
+lint = ["pre-commit>=4.2.0", "ruff>=0.11.1"]
+
+[tool.uv]
+package = false             # 不打包该项目为分发包
+python-downloads = "manual" # 手动管理 Python 版本（不自动下载）
+default-groups = ["lint"]   # 默认安装 lint 分组依赖
+
+
+[[tool.uv.index]] # 镜像源
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple"
