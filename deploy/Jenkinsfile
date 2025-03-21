@@ -1,0 +1,84 @@
+pipeline {
+    agent   any  // 在任意可用的 Jenkins 节点运行
+
+    environment {
+        ENVIRONMENT = "${BRANCH_NAME == 'master' ? 'production' : (BRANCH_NAME == 'test' ? 'test' : 'development')}"
+        CONTAINER_NAME = "fs-container-${ENVIRONMENT}"
+        DOCKER_PORT = "${ENVIRONMENT == 'production' ? '9091' : (ENVIRONMENT == 'test' ? '9092' : '9093')}"
+
+        GIT_REPO = "git@github.com:CodarZ/fastapi-service.git"
+        IMAGE_NAME = "fs-image"
+    }
+
+    stages {
+        stage('准备环境') {
+            steps {
+                echo "开始构建 FastAPI 服务..."
+                sh 'whoami'
+                sh 'python3 --version || true'
+            }
+        }
+
+        stage('拉取代码') {
+            steps {
+                echo "正在从 Git 仓库 ${BRANCH_NAME} 分支拉取最新代码..."
+                git branch: "${BRANCH_NAME}", url: "${GIT_REPO}"
+            }
+        }
+
+        stage('构建 Docker 镜像') {
+            steps {
+                echo "开始构建 Docker 镜像: ${IMAGE_NAME}"
+                script {
+                    sh """
+                    docker build --cache-from=${IMAGE_NAME}:latest -t ${IMAGE_NAME}:latest -f deploy/Dockerfile .
+                    """
+                }
+            }
+        }
+
+        stage('停止旧容器') {
+            steps {
+                echo "尝试停止旧容器"
+                script {
+                    sh """
+                    docker stop ${CONTAINER_NAME} || true
+                    docker rm ${CONTAINER_NAME} || true
+                    """
+                }
+            }
+        }
+
+        stage('部署新容器') {
+            steps {
+                echo "正在启动新容器..."
+                script {
+                    sh """
+                    docker run -d --name ${CONTAINER_NAME} -p ${DOCKER_PORT}:8000 -e ENVIRONMENT=${ENVIRONMENT} ${IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+
+        stage('验证部署') {
+            steps {
+                echo "检查容器是否成功运行..."
+                script {
+                    sh "docker ps | grep ${CONTAINER_NAME} || (echo '容器未运行！' && exit 1)"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ 部署成功！'
+        }
+        failure {
+            echo '❌ 部署失败，请检查日志。'
+        }
+        always {
+            echo '✅ Jenkins 流水线已结束。'
+        }
+    }
+}
