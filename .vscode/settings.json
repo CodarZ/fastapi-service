@@ -62,6 +62,9 @@
   "[properties]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"
   },
+  "[dockerfile]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format"
+  },
   // python
   "python.analysis.autoImportCompletions": true,
   "python.analysis.typeCheckingMode": "standard",
@@ -89,5 +92,5 @@
     "**/venv": true,
     "**/*cache": true,
     "**/__pycache__": true,
-  }
+  },
 }
