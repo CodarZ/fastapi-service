@@ -1,0 +1,154 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_REPO = "git@github.com:CodarZ/fastapi-service.git"
+        IMAGE_NAME = "fs-image"
+        DOCKERFILE_PATH = "deploy/Dockerfile"
+    }
+
+    stages {
+        stage('准备环境') {
+            steps {
+                script {
+                    echo "▶️ 开始构建 FastAPI 服务..."
+                    sh 'whoami'
+                    sh 'python3 --version || true'
+                    sh 'docker --version || true'
+                }
+            }
+        }
+
+        stage('计算环境变量') {
+            steps {
+                script {
+                    determineEnvironment()
+                    echo "📌 部署环境: ${env.ENVIRONMENT} | 端口: ${env.DOCKER_PORT} | 容器名: ${env.CONTAINER_NAME}"
+                }
+            }
+        }
+
+        stage('拉取代码') {
+            steps {
+                echo "🔄 从 Git 仓库拉取 ${env.BRANCH_NAME} 分支的最新代码..."
+                git branch: "${env.BRANCH_NAME}", url: "${env.GIT_REPO}"
+            }
+        }
+
+        stage('构建 Docker 镜像') {
+            steps {
+                script {
+                    def timestamp = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.IMAGE_NAME}:${timestamp}"
+
+                    echo "🔨 构建 Docker 镜像: ${env.IMAGE_TAG}"
+                    sh """
+                    docker build --cache-from=${env.IMAGE_NAME}:latest -t ${env.IMAGE_TAG} -f ${env.DOCKERFILE_PATH} .
+                    docker tag ${env.IMAGE_TAG} ${env.IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+
+        stage('停止旧容器') {
+            steps {
+                script {
+                    if (containerExists(env.CONTAINER_NAME)) {
+                        echo "🛑 停止旧容器: ${env.CONTAINER_NAME}"
+                        sh "docker stop ${env.CONTAINER_NAME} --time 10 || true"
+                        sh "docker rm ${env.CONTAINER_NAME} || true"
+                    } else {
+                        echo "✅ 旧容器不存在，无需停止。"
+                    }
+                }
+            }
+        }
+
+        stage('部署新容器') {
+            steps {
+                script {
+                    echo "🚀 启动新容器: ${env.CONTAINER_NAME} (端口: ${env.DOCKER_PORT})"
+                    sh """
+                    docker run -d \
+                        --name ${env.CONTAINER_NAME} \
+                        -p ${env.DOCKER_PORT}:8000 \
+                        -e ENVIRONMENT=${env.ENVIRONMENT} \
+                        ${env.IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('验证部署') {
+            steps {
+                script {
+                    if (!containerExists(env.CONTAINER_NAME)) {
+                        error "❌ 容器 ${env.CONTAINER_NAME} 未运行！"
+                    }
+
+                    def healthCheck = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${env.DOCKER_PORT}/health || echo '000'",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "🔍 健康检查 HTTP 状态码: ${healthCheck}"
+
+                    if (healthCheck != "200") {
+                        echo "⚠️ 健康检查失败 (HTTP ${healthCheck})，但不会影响流水线继续运行。"
+                    } else {
+                        echo "✅ 服务在端口 ${env.DOCKER_PORT} 上正常运行"
+                    }
+                }
+            }
+        }
+
+        stage('检查日志') {
+            steps {
+                echo "📜 打印最近 50 行容器日志: ${env.CONTAINER_NAME}"
+                sh "docker logs --tail 50 ${env.CONTAINER_NAME} || true"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "🎉 部署成功！"
+        }
+        failure {
+            echo "❌ 部署失败，请检查日志！"
+        }
+        always {
+            script {
+                echo "🧹 清理 24 小时前的无用 Docker 资源..."
+                sh "docker system prune --force --filter 'until=24h' || true"
+                cleanWs()
+            }
+        }
+    }
+}
+
+// **🔹 辅助函数**
+def determineEnvironment() {
+    def envMap = [
+        'master': 'production',
+        'test': 'test',
+        'develop': 'development'
+    ]
+    env.ENVIRONMENT = envMap.get(env.BRANCH_NAME, 'development')
+
+    def portMap = [
+        'production': '9091',
+        'test': '9092',
+        'development': '9093'
+    ]
+    env.DOCKER_PORT = portMap.get(env.ENVIRONMENT, '9099')
+
+    env.CONTAINER_NAME = "fs-container-${env.ENVIRONMENT}"
+}
+
+def containerExists(String name) {
+    return sh(
+        script: "docker inspect --format='{{.State.Running}}' ${name} >/dev/null 2>&1 && echo true || echo false",
+        returnStdout: true
+    ).trim() == 'true'
+}
