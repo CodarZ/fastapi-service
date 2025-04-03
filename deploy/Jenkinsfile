@@ -12,9 +12,6 @@ pipeline {
             steps {
                 script {
                     echo "▶️ 开始构建 FastAPI 服务..."
-                    sh 'whoami'
-                    sh 'python3 --version || true'
-                    sh 'docker --version || true'
                 }
             }
         }
@@ -39,12 +36,17 @@ pipeline {
             steps {
                 script {
                     def timestamp = sh(script: 'date +%Y%m%d%H%M%S', returnStdout: true).trim()
+                    def gitCommit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.IMAGE_TAG = "${env.IMAGE_NAME}:${timestamp}"
-
-                    echo "🔨 构建 Docker 镜像: ${env.IMAGE_TAG}"
+                    
+                    echo "🔨 构建 Docker 镜像: ${env.IMAGE_TAG} (Git Commit: ${gitCommit})"
+                    
                     sh """
-                    docker build --cache-from=${env.IMAGE_NAME}:latest -t ${env.IMAGE_TAG} -f ${env.DOCKERFILE_PATH} .
-                    docker tag ${env.IMAGE_TAG} ${env.IMAGE_NAME}:latest
+                    docker build --cache-from=${env.IMAGE_NAME}:latest \
+                        --build-arg GIT_COMMIT=${gitCommit} \
+                        -t ${env.IMAGE_TAG} \
+                        -t ${env.IMAGE_NAME}:latest \
+                        -f ${env.DOCKERFILE_PATH} .
                     """
                 }
             }
@@ -53,13 +55,12 @@ pipeline {
         stage('停止旧容器') {
             steps {
                 script {
-                    if (containerExists(env.CONTAINER_NAME)) {
-                        echo "🛑 停止旧容器: ${env.CONTAINER_NAME}"
-                        sh "docker stop ${env.CONTAINER_NAME} --time 10 || true"
-                        sh "docker rm ${env.CONTAINER_NAME} || true"
-                    } else {
-                        echo "✅ 旧容器不存在，无需停止。"
-                    }
+                    echo "🛑 停止并删除旧容器: ${env.CONTAINER_NAME} (如果存在)"
+                    sh """
+                    docker ps -q --filter "name=${env.CONTAINER_NAME}" | grep -q . && \
+                    docker stop ${env.CONTAINER_NAME} --time 5 || true
+                    docker rm -f ${env.CONTAINER_NAME} || true
+                    """
                 }
             }
         }
@@ -119,9 +120,14 @@ pipeline {
         }
         always {
             script {
-                echo "🧹 清理 24 小时前的无用 Docker 资源..."
-                sh "docker system prune --force --filter 'until=24h' || true"
+                echo "🧹 清理 3 天前的旧镜像和无用 Docker 资源..."
+                sh """
+                docker images --filter "reference=fs-image" --format "{{.Repository}}:{{.Tag}} {{.CreatedAt}}" | \
+                awk '$2 < "'$(date -d "3 days ago" '+%Y-%m-%d')'" {print $1}' | xargs -r docker rmi || true
+
+                docker system prune --force --filter "until=24h" || true
                 cleanWs()
+                """
             }
         }
     }
