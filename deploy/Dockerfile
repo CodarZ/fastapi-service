@@ -1,21 +1,5 @@
-ARG GIT_COMMIT
-LABEL git_commit=$GIT_COMMIT
-ENV GIT_COMMIT=$GIT_COMMIT
-
-# 使用 Python 3.10 作为基础镜像
-FROM python:3.10
-
-# 设置工作目录
-WORKDIR /app
-
-# 安装依赖工具（curl 用于下载 uv 安装脚本）
-RUN apt-get update && apt-get install -y curl
-
-# 下载并安装 uv
-RUN curl -Ls https://astral.sh/uv/install.sh | bash
-
-# 将 uv 添加到 PATH
-ENV PATH="/root/.local/bin:$PATH"
+# 使用带有基础环境的自构建镜像
+FROM fs-image:base
 
 # 复制代码
 COPY . /app

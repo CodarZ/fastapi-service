@@ -43,7 +43,6 @@ pipeline {
                     
                     sh """
                     docker build --cache-from=${env.IMAGE_NAME}:latest \
-                        --build-arg GIT_COMMIT=${gitCommit} \
                         -t ${env.IMAGE_TAG} \
                         -t ${env.IMAGE_NAME}:latest \
                         -f ${env.DOCKERFILE_PATH} .
