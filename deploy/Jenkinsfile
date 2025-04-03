@@ -121,13 +121,13 @@ pipeline {
         always {
             script {
                 echo "🧹 清理 3 天前的旧镜像和无用 Docker 资源..."
-                sh """
+                sh '''
                 docker images --filter "reference=fs-image" --format "{{.Repository}}:{{.Tag}} {{.CreatedAt}}" | \
                 awk '$2 < "'$(date -d "3 days ago" '+%Y-%m-%d')'" {print $1}' | xargs -r docker rmi || true
 
                 docker system prune --force --filter "until=24h" || true
+                '''
                 cleanWs()
-                """
             }
         }
     }
