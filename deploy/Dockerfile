@@ -1,3 +1,7 @@
+ARG GIT_COMMIT
+LABEL git_commit=$GIT_COMMIT
+ENV GIT_COMMIT=$GIT_COMMIT
+
 # 使用 Python 3.10 作为基础镜像
 FROM python:3.10
 
